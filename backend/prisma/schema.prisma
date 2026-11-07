@@ -1,0 +1,771 @@
+// ==============================================================================
+// Prisma Schema for Tikakaran Register - HMIS Reminder Software
+// Database: PostgreSQL (tikakaran_hmis)
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// Enums
+// ------------------------------------------------------------------------------
+
+enum UserRole {
+  ANM
+  PHC_MOIC
+  BLOCK_OFFICER
+  DISTRICT_OFFICER
+  ADMIN
+}
+
+enum HealthCentreType {
+  SUB_CENTRE
+  PHC
+  CHC
+  SUB_DISTRICT_HOSPITAL
+}
+
+enum SiteType {
+  ANGANWADI
+  SUB_CENTRE
+  PRIMARY_SCHOOL
+  OUTREACH_POINT
+}
+
+enum SessionType {
+  ROUTINE_RI
+  SPECIAL_CAMPAIGN
+  MCHND
+  PULSE_POLIO
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  NOT_CONDUCTED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BeneficiaryTargetGroup {
+  CHILD
+  PREGNANT_WOMAN
+  ADOLESCENT
+}
+
+enum VaccinationStatus {
+  ADMINISTERED
+  DUE
+  OVERDUE
+  MISSED
+}
+
+enum DeliveryStatus {
+  PREGNANT
+  DELIVERED
+  ABORTION
+}
+
+enum TdDoseType {
+  TD_1
+  TD_2
+  TD_BOOSTER
+}
+
+enum ServiceCategory {
+  FAMILY_PLANNING
+  NUTRITIONAL_SUPPLEMENT
+  NCD_SCREENING
+  TELEMEDICINE
+  DIAGNOSTICS
+}
+
+enum BeneficiaryType {
+  CHILD
+  PREGNANT_WOMAN
+  ADOLESCENT
+  ELDERLY
+  GENERAL
+}
+
+enum DiagnosticTestType {
+  HEMOGLOBIN
+  BLOOD_SUGAR_RBS
+  URINE_PREGNANCY
+  MALARIA_RDT
+  SYPHILIS_RDT
+  HIV_SCREENING
+}
+
+enum NationalPortal {
+  U_WIN
+  RCH_PORTAL
+  ANMOL
+  BHAVYA
+}
+
+enum PortalRecordType {
+  CHILD_VACCINE
+  ANC_REGISTRATION
+  DELIVERY
+  HEALTH_SERVICE
+}
+
+enum PortalEntryStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum HMISSection {
+  MATERNAL_HEALTH
+  IMMUNIZATION
+  FAMILY_PLANNING
+  CHILD_SERVICES
+  LAB_TESTS
+}
+
+enum HMISFormatType {
+  SC_FORM_7
+  AROGYA_DIWAS_ANM
+  REGULAR_IMMUNIZATION_ANM
+  HSC_MONTHLY_ELA
+}
+
+enum ReportStatus {
+  DRAFT
+  VALIDATED
+  SUBMITTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  WEEK_OFF
+  SICK_LEAVE
+  CASUAL_LEAVE
+  HOLIDAY
+  CHHATTIPURTI_LEAVE
+  ABSENT
+}
+
+enum LedgerTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  SYNC
+}
+
+// ------------------------------------------------------------------------------
+// 1. User & Authentication
+// ------------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         UserRole   @default(ANM)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  anmProfile   ANMProfile?
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// 2. Health Facility & Jurisdiction
+// ------------------------------------------------------------------------------
+
+model HealthCentre {
+  id           String           @id @default(uuid())
+  code         String           @unique // e.g. "SC-49201"
+  name         String           // e.g. "Sub-Centre Pipariya"
+  type         HealthCentreType @default(SUB_CENTRE)
+  block        String           // e.g. "Rampur Block"
+  district     String           // e.g. "Jabalpur"
+  state        String           @default("Madhya Pradesh")
+  phcName      String           // Attached PHC, e.g. "Rampur PHC"
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  anmProfiles  ANMProfile[]
+  sites        Site[]
+  dutyRecords  DutyRecord[]
+  hmisReports  HMISReport[]
+
+  @@index([district, block])
+  @@index([code])
+  @@map("health_centres")
+}
+
+// ------------------------------------------------------------------------------
+// 3. ANM Profile (Auxiliary Nurse Midwife)
+// ------------------------------------------------------------------------------
+
+model ANMProfile {
+  id                  String               @id @default(uuid())
+  userId              String               @unique
+  healthCentreId      String
+  fullName            String               // e.g. "Smt. Sunita Sharma"
+  designation         String               @default("ANM (Auxiliary Nurse Midwife)")
+  mobile              String               @unique
+  hmisPortalId        String?              @unique
+  rchPortalId         String?              @unique
+  anmolId             String?
+  avatarUrl           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  healthCentre        HealthCentre         @relation(fields: [healthCentreId], references: [id])
+  
+  sessions            VaccinationSession[]
+  children            Child[]
+  pregnantWomen       PregnantWoman[]
+  serviceRecords      ServiceRecord[]
+  testRecords         TestRecord[]
+  portalEntries       PortalEntry[]
+  hmisReports         HMISReport[]
+  dutyRecords         DutyRecord[]
+  chhattipurtiLedgers ChhattipurtiLedger[]
+
+  @@index([healthCentreId])
+  @@index([mobile])
+  @@map("anm_profiles")
+}
+
+// ------------------------------------------------------------------------------
+// 4. Immunization Sites & Anganwadi Centres (AWC)
+// ------------------------------------------------------------------------------
+
+model Site {
+  id               String               @id @default(uuid())
+  healthCentreId   String
+  code             String               @unique // e.g. "AWC-04"
+  name             String               // e.g. "Anganwadi Kendra Pipariya Ward-04"
+  type             SiteType             @default(ANGANWADI)
+  village          String               // e.g. "Pipariya"
+  wardNo           String?
+  ashaName         String               // e.g. "Sunita Malviya"
+  ashaPhone        String               // e.g. "+91 98261 44521"
+  targetPopulation Int                  @default(0)
+  sessionDay       String?              // e.g. "1st Wednesday"
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  healthCentre     HealthCentre         @relation(fields: [healthCentreId], references: [id], onDelete: Cascade)
+  sessions         VaccinationSession[]
+  children         Child[]
+  pregnantWomen    PregnantWoman[]
+
+  @@index([healthCentreId])
+  @@index([village])
+  @@index([code])
+  @@map("sites")
+}
+
+// ------------------------------------------------------------------------------
+// 5. Vaccination Session Management
+// ------------------------------------------------------------------------------
+
+model VaccinationSession {
+  id                  String              @id @default(uuid())
+  siteId              String
+  anmId               String
+  sessionDate         DateTime            @db.Date
+  sessionType         SessionType         @default(ROUTINE_RI)
+  startTime           String              @default("09:00 AM")
+  endTime             String              @default("02:00 PM")
+  status              SessionStatus       @default(SCHEDULED)
+  cancellationReason  String?
+  beneficiariesTarget Int                 @default(0)
+  pregnantTarget      Int                 @default(0)
+  beneficiariesActual Int                 @default(0)
+  pregnantActual      Int                 @default(0)
+  coldChainStatus     String?             @default("4.2°C Safe")
+  remarks             String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  site                Site                @relation(fields: [siteId], references: [id])
+  anm                 ANMProfile          @relation(fields: [anmId], references: [id])
+  vaccinationRecords  VaccinationRecord[]
+  tdRecords           TDRecord[]
+
+  @@index([sessionDate])
+  @@index([siteId])
+  @@index([anmId])
+  @@index([status])
+  @@map("vaccination_sessions")
+}
+
+// ------------------------------------------------------------------------------
+// 6. Child Register
+// ------------------------------------------------------------------------------
+
+model Child {
+  id                 String              @id @default(uuid())
+  registrationNumber String              @unique // e.g. "CHD-2026-001"
+  rchId              String?             @unique
+  anmId              String
+  siteId             String
+  name               String
+  dob                DateTime            @db.Date
+  gender             Gender
+  birthWeight        Decimal?            @db.Decimal(4, 2)
+  motherName         String
+  fatherName         String?
+  guardianPhone      String
+  address            String?
+  village            String
+  awcCode            String
+  isHighRisk         Boolean             @default(false)
+  highRiskReason     String?
+  isDeceased         Boolean             @default(false)
+  isMigrated         Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  anm                ANMProfile          @relation(fields: [anmId], references: [id])
+  site               Site                @relation(fields: [siteId], references: [id])
+  vaccinationRecords VaccinationRecord[]
+
+  @@index([anmId])
+  @@index([siteId])
+  @@index([village])
+  @@index([dob])
+  @@index([rchId])
+  @@map("children")
+}
+
+// ------------------------------------------------------------------------------
+// 7. Universal Immunization Programme (UIP) Vaccine Master
+// ------------------------------------------------------------------------------
+
+model VaccineMaster {
+  id                 String                 @id @default(uuid())
+  code               String                 @unique // e.g. "BCG", "PENTA_1", "MR_1"
+  name               String
+  targetGroup        BeneficiaryTargetGroup @default(CHILD)
+  doseNumber         Int
+  doseLabel          String                 // e.g. "Birth Dose", "Dose 1", "Booster"
+  recommendedAgeDays Int
+  minAgeDays         Int?
+  maxAgeDays         Int?
+  route              String                 // e.g. "Intramuscular", "Oral", "Intradermal"
+  siteOfInjection    String?                // e.g. "Left Upper Arm"
+  isActive           Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  vaccinationRecords VaccinationRecord[]
+
+  @@index([code])
+  @@index([targetGroup])
+  @@map("vaccine_masters")
+}
+
+// ------------------------------------------------------------------------------
+// 8. Child Vaccination Record
+// ------------------------------------------------------------------------------
+
+model VaccinationRecord {
+  id                  String             @id @default(uuid())
+  childId             String
+  vaccineId           String
+  sessionId           String?
+  doseGiven           String
+  administeredDate    DateTime?          @db.Date
+  dueDate             DateTime           @db.Date
+  status              VaccinationStatus  @default(DUE)
+  batchNumber         String?
+  expiryDate          DateTime?          @db.Date
+  coldChainTemp       Decimal?           @db.Decimal(4, 1) // e.g. 4.2
+  administeredBy      String?
+  adverseEvent        Boolean            @default(false)
+  adverseEventDetails String?
+  remarks             String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  child               Child              @relation(fields: [childId], references: [id], onDelete: Cascade)
+  vaccine             VaccineMaster      @relation(fields: [vaccineId], references: [id])
+  session             VaccinationSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([childId])
+  @@index([vaccineId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([administeredDate])
+  @@map("vaccination_records")
+}
+
+// ------------------------------------------------------------------------------
+// 9. Pregnant Women Register
+// ------------------------------------------------------------------------------
+
+model PregnantWoman {
+  id                 String         @id @default(uuid())
+  registrationNumber String         @unique // e.g. "PW-2026-001"
+  rchId              String?        @unique
+  anmId              String
+  siteId             String
+  name               String
+  age                Int
+  husbandName        String
+  mobile             String
+  village            String
+  awcCode            String
+  lmpDate            DateTime       @db.Date
+  eddDate            DateTime       @db.Date
+  gravida            Int            @default(1)
+  para               Int            @default(0)
+  isHighRisk         Boolean        @default(false)
+  highRiskReason     String?
+  bloodGroup         String?
+  deliveryStatus     DeliveryStatus @default(PREGNANT)
+  actualDeliveryDate DateTime?      @db.Date
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  anm                ANMProfile     @relation(fields: [anmId], references: [id])
+  site               Site           @relation(fields: [siteId], references: [id])
+  ancVisits          ANCVisit[]
+  tdRecords          TDRecord[]
+
+  @@index([anmId])
+  @@index([siteId])
+  @@index([village])
+  @@index([eddDate])
+  @@index([isHighRisk])
+  @@map("pregnant_women")
+}
+
+// ------------------------------------------------------------------------------
+// 10. Antenatal Care (ANC) Visits
+// ------------------------------------------------------------------------------
+
+model ANCVisit {
+  id                   String        @id @default(uuid())
+  pregnantWomanId      String
+  visitNumber          Int           // 1, 2, 3, 4, ...
+  visitDate            DateTime      @db.Date
+  gestationalWeeks     Int?
+  weightKg             Decimal?      @db.Decimal(5, 2)
+  bpSystolic           Int?
+  bpDiastolic          Int?
+  hemoglobin           Decimal?      @db.Decimal(4, 1)
+  urineAlbumin         String?
+  urineSugar           String?
+  fundalHeight         String?
+  foetalHeartRate      Int?
+  ifaTabletsIssued     Int           @default(0)
+  calciumTabletsIssued Int           @default(0)
+  isHighRiskIdentified Boolean       @default(false)
+  referralFacility     String?
+  remarks              String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  pregnantWoman        PregnantWoman @relation(fields: [pregnantWomanId], references: [id], onDelete: Cascade)
+
+  @@index([pregnantWomanId])
+  @@index([visitDate])
+  @@map("anc_visits")
+}
+
+// ------------------------------------------------------------------------------
+// 11. Maternal Tetanus & Adult Diphtheria (Td) Records
+// ------------------------------------------------------------------------------
+
+model TDRecord {
+  id               String              @id @default(uuid())
+  pregnantWomanId  String
+  sessionId        String?
+  doseType         TdDoseType          // TD_1, TD_2, TD_BOOSTER
+  administeredDate DateTime            @db.Date
+  batchNumber      String?
+  expiryDate       DateTime?           @db.Date
+  administeredBy   String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  pregnantWoman    PregnantWoman       @relation(fields: [pregnantWomanId], references: [id], onDelete: Cascade)
+  session          VaccinationSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([pregnantWomanId])
+  @@index([doseType])
+  @@index([administeredDate])
+  @@map("td_records")
+}
+
+// ------------------------------------------------------------------------------
+// 12. Primary Health Service Master
+// ------------------------------------------------------------------------------
+
+model ServiceMaster {
+  id             String          @id @default(uuid())
+  code           String          @unique // e.g. "FP_ORAL_PILLS", "NCD_SCREENING", "SUPP_IFA"
+  category       ServiceCategory
+  name           String
+  unit           String          // e.g. "Packets", "Screenings", "Strips"
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  serviceRecords ServiceRecord[]
+
+  @@index([code])
+  @@index([category])
+  @@map("service_masters")
+}
+
+// ------------------------------------------------------------------------------
+// 13. Health Service Record
+// ------------------------------------------------------------------------------
+
+model ServiceRecord {
+  id               String          @id @default(uuid())
+  serviceId        String
+  anmId            String
+  serviceDate      DateTime        @db.Date
+  beneficiaryName  String
+  beneficiaryType  BeneficiaryType @default(GENERAL)
+  quantityProvided Int             @default(1)
+  details          Json?
+  remarks          String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  service          ServiceMaster   @relation(fields: [serviceId], references: [id])
+  anm              ANMProfile      @relation(fields: [anmId], references: [id])
+
+  @@index([serviceId])
+  @@index([anmId])
+  @@index([serviceDate])
+  @@map("service_records")
+}
+
+// ------------------------------------------------------------------------------
+// 14. Rapid Diagnostic Tests & Screenings
+// ------------------------------------------------------------------------------
+
+model TestRecord {
+  id               String             @id @default(uuid())
+  anmId            String
+  testType         DiagnosticTestType
+  beneficiaryName  String
+  beneficiaryPhone String?
+  testDate         DateTime           @db.Date
+  resultValue      String             // e.g. "11.4", "130", "Negative"
+  resultUnit       String?            // e.g. "g/dL", "mg/dL"
+  isAbnormal       Boolean            @default(false)
+  actionTaken      String?            // e.g. "IFA prescribed", "Referred to PHC"
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  anm              ANMProfile         @relation(fields: [anmId], references: [id])
+
+  @@index([anmId])
+  @@index([testType])
+  @@index([testDate])
+  @@index([isAbnormal])
+  @@map("test_records")
+}
+
+// ------------------------------------------------------------------------------
+// 15. National Portal Pending Entries (U-WIN, RCH, Anmol, Bhavya)
+// ------------------------------------------------------------------------------
+
+model PortalEntry {
+  id              String            @id @default(uuid())
+  anmId           String
+  portal          NationalPortal
+  recordType      PortalRecordType
+  localRecordId   String
+  beneficiaryName String
+  entryStatus     PortalEntryStatus @default(PENDING)
+  pendingReason   String?
+  retryCount      Int               @default(0)
+  lastSyncAttempt DateTime?
+  syncedAt        DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  anm             ANMProfile        @relation(fields: [anmId], references: [id])
+
+  @@index([anmId])
+  @@index([portal])
+  @@index([entryStatus])
+  @@map("portal_entries")
+}
+
+// ------------------------------------------------------------------------------
+// 16. HMIS Master Indicator Item
+// ------------------------------------------------------------------------------
+
+model HMISItem {
+  id             String            @id @default(uuid())
+  itemCode       String            @unique // e.g. "1.1", "2.1", "2.5"
+  section        HMISSection
+  indicatorName  String
+  targetElaRatio Decimal?          @db.Decimal(5, 2)
+  displayOrder   Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  reportValues   HMISReportValue[]
+
+  @@index([itemCode])
+  @@index([section])
+  @@map("hmis_items")
+}
+
+// ------------------------------------------------------------------------------
+// 17. HMIS Return Report (Sub-Centre Form-7)
+// ------------------------------------------------------------------------------
+
+model HMISReport {
+  id             String            @id @default(uuid())
+  healthCentreId String
+  anmId          String
+  reportMonth    String            // e.g. "October"
+  reportYear     Int               // e.g. 2026
+  formatType     HMISFormatType    @default(SC_FORM_7)
+  status         ReportStatus      @default(DRAFT)
+  submissionDate DateTime?
+  certifiedBy    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  healthCentre   HealthCentre      @relation(fields: [healthCentreId], references: [id])
+  anm            ANMProfile        @relation(fields: [anmId], references: [id])
+  values         HMISReportValue[]
+
+  @@index([healthCentreId])
+  @@index([anmId])
+  @@index([reportMonth, reportYear])
+  @@index([formatType])
+  @@map("hmis_reports")
+}
+
+// ------------------------------------------------------------------------------
+// 18. HMIS Indicator Value
+// ------------------------------------------------------------------------------
+
+model HMISReportValue {
+  id               String     @id @default(uuid())
+  reportId         String
+  itemId           String
+  maleCount        Int        @default(0)
+  femaleCount      Int        @default(0)
+  totalCount       Int        @default(0)
+  targetEla        Int        @default(0)
+  validationStatus String     @default("Validated")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  report           HMISReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  item             HMISItem   @relation(fields: [itemId], references: [id])
+
+  @@index([reportId])
+  @@index([itemId])
+  @@map("hmis_report_values")
+}
+
+// ------------------------------------------------------------------------------
+// 19. ANM Duty & Attendance Record
+// ------------------------------------------------------------------------------
+
+model DutyRecord {
+  id             String           @id @default(uuid())
+  anmId          String
+  healthCentreId String
+  dutyDate       DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  dutyType       String?          // e.g. "Sub-Centre RI Session & Clinic"
+  remarks        String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  anm            ANMProfile       @relation(fields: [anmId], references: [id])
+  healthCentre   HealthCentre     @relation(fields: [healthCentreId], references: [id])
+
+  @@unique([anmId, dutyDate])
+  @@index([anmId])
+  @@index([dutyDate])
+  @@index([status])
+  @@map("duty_records")
+}
+
+// ------------------------------------------------------------------------------
+// 20. Chhattipurti (Compensatory Off) Ledger
+// ------------------------------------------------------------------------------
+
+model ChhattipurtiLedger {
+  id                  String                @id @default(uuid())
+  anmId               String
+  transactionDate     DateTime              @db.Date
+  type                LedgerTransactionType
+  days                Decimal               @db.Decimal(3, 1)
+  activityDescription String                // e.g. "Sunday Pulse Polio SNID Duty"
+  approvedBy          String                // e.g. "Dr. A.K. Verma (MOIC Rampur PHC)"
+  balanceAfter        Decimal               @db.Decimal(4, 1)
+  remarks             String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  anm                 ANMProfile            @relation(fields: [anmId], references: [id])
+
+  @@index([anmId])
+  @@index([transactionDate])
+  @@index([type])
+  @@map("chhattipurti_ledgers")
+}
+
+// ------------------------------------------------------------------------------
+// 21. Audit Log (Regulatory & Compliance)
+// ------------------------------------------------------------------------------
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  entityType String      // e.g. "Child", "VaccinationRecord", "PregnantWoman"
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  changes    Json?
+  createdAt  DateTime    @default(now())
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

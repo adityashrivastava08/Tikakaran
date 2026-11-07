@@ -1,0 +1,43 @@
+{
+  "name": "tikakaran-backend",
+  "version": "1.0.0",
+  "description": "REST API and Database Service for Tikakaran Register - HMIS Reminder Software",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node tests/auth.test.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "node prisma/seed.js"
+  },
+  "keywords": [
+    "tikakaran",
+    "hmis",
+    "anm",
+    "healthcare",
+    "immunization",
+    "express",
+    "prisma",
+    "postgresql"
+  ],
+  "author": "Tikakaran HMIS Team",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "prisma": "^5.22.0"
+  }
+}
+
