@@ -1,0 +1,6 @@
+# Ignore backend from Vercel Serverless Function detection
+backend/
+scripts/
+.git
+.env
+.env.*
