@@ -24,6 +24,17 @@ const server = app.listen(PORT, () => {
   console.log(`====================================================`);
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ [Server Error] Port ${PORT} is currently in use.`);
+    console.error(`💡 Running 'npm run dev' will automatically free port ${PORT} before starting.`);
+    process.exit(1);
+  } else {
+    console.error('[Server Error]', err.message || err);
+    process.exit(1);
+  }
+});
+
 // Graceful shutdown handling
 const gracefulShutdown = async (signal) => {
   console.log(`\n[Server] Received ${signal}. Gracefully shutting down...`);
