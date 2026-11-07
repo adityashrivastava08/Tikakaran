@@ -132,8 +132,12 @@ export function AuthProvider({ children }) {
       return loggedUser;
     } catch (err) {
       setIsLoading(false);
-      setError(err.message);
-      throw err;
+      const friendlyMessage = (err.name === 'TypeError' || err.message?.includes('fetch'))
+        ? 'Backend API server unreachable. Please make sure the Node.js backend server is running on port 5000 (npm run server).'
+        : (err.message || 'Login failed. Please verify your health worker credentials.');
+      setError(friendlyMessage);
+      const customErr = new Error(friendlyMessage);
+      throw customErr;
     }
   };
 

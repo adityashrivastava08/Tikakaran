@@ -6,15 +6,25 @@ import { sendError } from './utils/response.util.js';
 
 const app = express();
 
-// 1. CORS Configuration (matches frontend origin)
-const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+// 1. CORS Configuration (supports local dev origins & Vite ports)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:4173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
+];
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl, Postman)
-    if (!origin || origin === allowedOrigin || origin === 'http://localhost:5173') {
+    // Allow requests with no origin (e.g. mobile apps, curl, Postman) or any localhost port in development
+    if (!origin || allowedOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       callback(null, true);
     } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+      callback(null, false);
     }
   },
   credentials: true,
