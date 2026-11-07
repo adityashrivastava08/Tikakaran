@@ -9,7 +9,7 @@
     "dev:frontend": "vite",
     "dev:backend": "node backend/src/server.js",
     "server": "node backend/src/server.js",
-    "build": "vite build",
+    "build": "npx vite build",
     "preview": "vite preview"
   },
   "dependencies": {
